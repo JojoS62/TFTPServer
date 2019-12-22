@@ -29,7 +29,12 @@
  */
 #include "TFTPServer.h"
 
-//#define TFTP_DEBUG
+//#define DEBUG_TFTP
+#ifdef DEBUG_TFTP
+#define DEBUG_TFTP(...) printf(__VA_ARGS__)
+#else
+#define DEBUG_TFTP(...)
+#endif
 
 /**
  * @brief   Creates a new TFTP server listening on myPort.
@@ -41,9 +46,8 @@
 TFTPServer::TFTPServer(NetworkInterface* net, uint16_t myPort /* = 69 */ )
 {
     port = myPort;
-#ifdef TFTP_DEBUG
-    printf("TFTPServer(): port=%d\r\n", myPort);
-#endif
+    DEBUG_TFTP("TFTPServer(): port=%d\r\n", myPort);
+
     socket = new UDPSocket();
     socket->open(net);
     
@@ -54,9 +58,8 @@ TFTPServer::TFTPServer(NetworkInterface* net, uint16_t myPort /* = 69 */ )
         state = ERROR;
     }
 
-#ifdef TFTP_DEBUG
-    printf("FTP server state = %d\r\n", getState());
-#endif
+    DEBUG_TFTP("FTP server state = %d\r\n", getState());
+
     socket->set_blocking(false);
     fileCounter = 0;
 }
@@ -71,7 +74,6 @@ TFTPServer::~TFTPServer()
 {
     socket->close();
     delete(socket);
-    strcpy(remoteIP, "");
     state = DELETED;
 }
 
@@ -85,12 +87,11 @@ void TFTPServer::reset()
 {
     socket->close();
     delete(socket);
-    strcpy(remoteIP, "");
     socket = new UDPSocket();
     state = LISTENING;
     if (socket->bind(port))
     {
-        socketAddr = SocketAddress(0, port);
+        socketAddr.set_port(port);
         state = ERROR;
     }
 
@@ -152,9 +153,8 @@ void TFTPServer::poll()
     if (len <= 0)
         return;
 
-#ifdef TFTP_DEBUG
-    printf("Got block with size %d.\n\r", len);
-#endif
+    DEBUG_TFTP("Got block with size %d.\n\r", len);
+
     switch (state) {
         case LISTENING:
             {
@@ -176,9 +176,7 @@ void TFTPServer::poll()
                         break;
 
                     case 0x05:          // ERROR packet received
-        #ifdef TFTP_DEBUG
-                        printf("TFTP Eror received.\r\n");
-        #endif
+                        DEBUG_TFTP("TFTP Error received.\r\n");
                         break;
 
                     default:            // unknown TFTP packet type
@@ -206,7 +204,7 @@ void TFTPServer::poll()
                                 sendError("Too many dups");
                                 fclose(file);
                                 state = LISTENING;
-                                strcpy(remoteIP, "");
+                                remoteAddr.set_ip_address("");
                             }
                             break;
 
@@ -215,7 +213,7 @@ void TFTPServer::poll()
                             sendError("WRQ received on open read socket");
                             fclose(file);
                             state = LISTENING;
-                            strcpy(remoteIP, "");
+                            remoteAddr.set_ip_address("");
                             break;
 
                         case 0x03:
@@ -223,7 +221,7 @@ void TFTPServer::poll()
                             sendError("Received data package on sending socket");
                             fclose(file);
                             state = LISTENING;
-                            strcpy(remoteIP, "");
+                            remoteAddr.set_ip_address("");
                             break;
 
                         case 0x04:
@@ -238,7 +236,7 @@ void TFTPServer::poll()
                             {           //EOF
                                 fclose(file);
                                 state = LISTENING;
-                                strcpy(remoteIP, "");
+                                remoteAddr.set_ip_address("");
                             }
                             break;
 
@@ -246,15 +244,13 @@ void TFTPServer::poll()
                             sendError("Received 0x05 error message");
                             fclose(file);
                             state = LISTENING;
-                            strcpy(remoteIP, "");
+                            remoteAddr.set_ip_address("");
                             break;
                     }                   // switch (buff[1])
                 }
-
-    #ifdef TFTP_DEBUG
-                else
-                    printf("Ignoring package from other remote client during RRQ.\r\n");
-    #endif
+                else {
+                    DEBUG_TFTP("Ignoring package from other remote client during RRQ.\r\n");
+                }
                 break;                  // reading
             }
 
@@ -267,9 +263,7 @@ void TFTPServer::poll()
                             {
                                 // if this is a returning host, send ack again
                                 ack(0);
-        #ifdef TFTP_DEBUG
-                                printf("Resending Ack on WRQ.\r\n");
-        #endif
+                                DEBUG_TFTP("Resending Ack on WRQ.\r\n");
                                 break;  // case 0x02
                             }
 
@@ -293,7 +287,7 @@ void TFTPServer::poll()
                                         fclose(file);
                                         state = LISTENING;
                                         remove(fileName);
-                                        strcpy(remoteIP, "");
+                                        remoteAddr.set_ip_address("");
                                     }
                                     else
                                     {   // duplicate packet, send ACK again
@@ -317,11 +311,9 @@ void TFTPServer::poll()
                                     ack(blockCounter);
                                     fclose(file);
                                     state = LISTENING;
-                                    strcpy(remoteIP, "");
+                                    remoteAddr.set_ip_address("");
                                     fileCounter++;
-        #ifdef TFTP_DEBUG
-                                    printf("File receive finished.\r\n");
-        #endif
+                                    DEBUG_TFTP("File receive finished.\r\n");
                                 }
                                 break;  // case 0x03
                             }
@@ -333,11 +325,9 @@ void TFTPServer::poll()
                             }
                     }                   // switch (buff[1])
                 }
-
-    #ifdef TFTP_DEBUG
-                else
-                    printf("Ignoring packege from other remote client during WRQ.\r\n");
-    #endif
+                else {
+                    DEBUG_TFTP("Ignoring packege from other remote client during WRQ.\r\n");
+                }
                 break;                  // writing
             }
 
@@ -380,10 +370,9 @@ int TFTPServer::fileCount()
  */
 void TFTPServer::connectRead(char* buff)
 {
-    strcpy(remoteIP, socketAddr.get_ip_address());
-    remotePort = socketAddr.get_port();
     blockCounter = 0;
     dupCounter = 0;
+    remoteAddr = socketAddr;
 
     sprintf(fileName, "%s", &buff[2]);
 
@@ -406,15 +395,11 @@ void TFTPServer::connectRead(char* buff)
     {
         // file ready for reading
         state = READING;
-#ifdef TFTP_DEBUG
-        printf
-        (
-            "Listening: Requested file %s from TFTP connection %s port %d\r\n",
+        DEBUG_TFTP("Listening: Requested file %s from TFTP connection %s port %d\r\n",
             fileName,
-            remoteIP,
-            remotePort
+            remoteAddr.get_ip_address(),
+            remoteAddr.get_port()
         );
-#endif
         getBlock();
         sendBlock();
     }
@@ -429,11 +414,11 @@ void TFTPServer::connectRead(char* buff)
  */
 void TFTPServer::connectWrite(char* buff)
 {
-    strcpy(remoteIP, socketAddr.get_ip_address());
-    remotePort = socketAddr.get_port();
     ack(0);
     blockCounter = 0;
     dupCounter = 0;
+    remoteAddr = socketAddr;
+
     sprintf(fileName, "%s", &buff[2]);
 
     if (modeOctet(buff))
@@ -447,22 +432,18 @@ void TFTPServer::connectWrite(char* buff)
         printf("Could not open file to write, error: %d\n", err);
         sendError("Could not open file to write.\n");
         state = LISTENING;
-        strcpy(remoteIP, "");
+        remoteAddr.set_ip_address("");
     }
     else
     {
         // file ready for writing
         blockCounter = 0;
         state = WRITING;
-#ifdef TFTP_DEBUG
-        printf
-        (
-            "Listening: Incoming file %s on TFTP connection from %s clientPort %d\r\n",
+        DEBUG_TFTP("Listening: Incoming file %s on TFTP connection from %s clientPort %d\r\n",
             fileName,
-            remoteIP,
-            remotePort
+            remoteAddr.get_ip_address(),
+            remoteAddr.get_port()
         );
-#endif
     }
 }
 
@@ -502,11 +483,12 @@ void TFTPServer::sendBlock()
  */
 int TFTPServer::cmpHost()
 {
-    char    ip[17];
-    strcpy(ip, socketAddr.get_ip_address());
+    // char    ip[17];
+    // strcpy(ip, socketAddr.get_ip_address());
 
-    int port = socketAddr.get_port();
-    return((strcmp(ip, remoteIP) == 0) && (port == remotePort));
+    // int port = socketAddr.get_port();
+    // return((strcmp(ip, remoteIP) == 0) && (port == remotePort));
+    return (remoteAddr == socketAddr);
 }
 
 /**
@@ -544,9 +526,7 @@ void TFTPServer::sendError(const char* msg)
 
     int len = 4 + strlen(&errorBuff[4]) + 1;
     socket->sendto(socketAddr, errorBuff, len);
-#ifdef TFTP_DEBUG
-    printf("Error: %s\r\n", msg);
-#endif
+    DEBUG_TFTP("Error: %s\r\n", msg);
 }
 
 /**

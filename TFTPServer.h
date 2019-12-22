@@ -114,8 +114,8 @@ private:
     uint16_t        port;                       // TFTP port
     UDPSocket*      socket;                     // Main listening socket (dflt: UDP port 69)
     State           state;                      // Current TFTP server state
-    char            remoteIP[18];               // Connected remote Host IP
-    int             remotePort;                 // Connected remote Host Port
+    SocketAddress   remoteAddr;                 // Connected remote Host IP
+    //int             remotePort;                 // Connected remote Host Port
     uint16_t        blockCounter, dupCounter;   // Block counter, and DUP counter
     FILE*           file;                       // Current file to read or write
     char            blockBuff[516];             // Current DATA block;
