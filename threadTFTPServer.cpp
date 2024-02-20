@@ -64,11 +64,7 @@ void ThreadTFTPServer::myThreadFn()
     }
 
     while(_running) {
-        uint64_t nextTime = get_ms_count() + _cycleTime;
-
         _tftpServer->poll();
-
-        ThisThread::sleep_until(nextTime);
     }
 }
 

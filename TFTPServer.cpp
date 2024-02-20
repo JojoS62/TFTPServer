@@ -60,7 +60,8 @@ TFTPServer::TFTPServer(NetworkInterface* net, uint16_t myPort /* = 69 */ )
 
     DEBUG_TFTP("FTP server state = %d\r\n", getState());
 
-    socket->set_blocking(false);
+    socket->set_blocking(true);
+
     fileCounter = 0;
 }
 
@@ -144,8 +145,6 @@ void TFTPServer::poll()
 {
     if ((state == SUSPENDED) || (state == DELETED) || (state == ERROR))
         return;
-
-    socket->set_blocking(false);
 
     char    buff[516];
     int     len = socket->recvfrom(&socketAddr, buff, sizeof(buff));
