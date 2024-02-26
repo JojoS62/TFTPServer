@@ -96,7 +96,7 @@ void TFTPServer::reset()
         state = ERROR;
     }
 
-    socket->set_blocking(false);
+    socket->set_blocking(true);
     strcpy(fileName, "");
     fileCounter = 0;
 }
